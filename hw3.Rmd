@@ -1,0 +1,265 @@
+---
+title: "Homework 3: Image analysis"
+author: "Viviana Alejandra Rodriguez Romero"
+date: "October 9, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options("scipen"=100, "digits"=4)
+```
+
+<br />   
+
+## Question 1
+
+In R, write a function that will accept a character string representing a nucleic acid sequence and outputs the corresponding mRNA strand. Note that the sequence may consist of both upper and lower case letters.    
+
+```{r, error = TRUE}
+trans.mRNA<-function(v){
+  #v: character string representing at nucleic acid sequence
+  
+  bases<-cbind(c("A", "C", "T", "G", "a", "c", "t", "g"),c("U", "G", "A", "C", "u", "g", "a", "c"))
+  colnames(bases)<-c("DNA", "mRNA")
+  
+  s<-substring(v, seq(1, nchar(v), 1), seq(1, nchar(v), 1))
+  
+  if (all(sapply(s, function(x) x %in% bases[,1]))==FALSE){
+      stop('Your input does not correspond to a nucleic acid sequence')
+  } else{
+      mRNA<-vector(length = nchar(v))  
+      for(i in 1:nchar(v)){
+         mRNA[i]<-bases[bases[,1]==s[i],2]
+      }
+      return(paste(mRNA, collapse = ''))
+    }
+}
+
+trans.mRNA("ACTG")
+trans.mRNA("actg")
+trans.mRNA("AcTg")
+trans.mRNA("ACmG")
+```    
+
+<br />   
+
+## Question 2
+
+In R, write a function that will accept a character string representing a nucleic acid sequence and outputs the percent of bases that are either G or C (GC content). Note that the sequence may consist of both upper and lower case letters.
+
+```{r, error = TRUE}
+GC.content<-function(v){
+  #v: character string representing at nucleic acid sequence
+  
+  bases<-cbind(c("A", "C", "T", "G", "a", "c", "t", "g"),c("U", "G", "A", "C", "u", "g", "a", "c"))
+  colnames(bases)<-c("DNA", "mRNA")
+  
+  s<-substring(v, seq(1, nchar(v), 1), seq(1, nchar(v), 1))
+  
+  if (all(sapply(s, function(x) x %in% bases[,1]))==FALSE){
+      stop('Your input does not correspond to a nucleic acid sequence')
+  } else{
+    gc<-sum(sapply(s, function(x) toupper(x) %in% c("C","G")))  
+    gc<-round(gc*100/ nchar(v),1)
+    return(gc)
+    }
+}
+
+GC.content("ACTG")
+GC.content("Actg")
+GC.content("cccG")
+GC.content("ACmG")
+```  
+
+<br />   
+
+## Question 3
+
+Suppose your microarray imaging software stores your pixel level data as a 16 bit digital image.  
+
+a) How many possible pixel values are there?
+
+There are `r 2^16` posible pixel values.
+
+b) What is the range of these pixel values?
+
+a 16 bit image has possible values ranging from 0 to $2^{16}-1$ (`r (2^16)-1`); 0 (black), `r (2^16)-1` (white), and `r (2^16)-2` gray levels.
+
+c) How would a pixel with an intensity of 5312 be stored using 16 bits?
+
+```{r}
+library(DT)
+q3<-matrix(nrow = 4, ncol = 16)
+rownames(q3)<-c("n", "pixel", "stored", "repr")
+q3[1,]<-seq(1,16,1)
+q3[2,]<-sapply(q3[1,], function(x) 2^x)
+q3[3,]<-c(0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0)
+q3[4,]<-q3[2,]*q3[3,]
+datatable(q3,colnames=FALSE, options = list(dom = 't'))
+
+#Representation
+sum(q3[4,])
+```
+
+<br />  
+
+As shown in the table above, the intensity 5312 would be stored as (`r q3[3,]`).
+
+<br />  
+
+## Question 4
+
+The PixelData.csv file contains pixel level foreground intensities for different probe sets; for this example, each probe set consists of 20 probes. The probe sets are identifiable by the field "ProbeSet" while the probes comprising the probe sets are identifiable by the combination of the "ProbeX" and "ProbeY" fields (which are the coordinates of the probe on the GeneChip). Process this raw pixel data as follows:   
+
+
+a) Read the PixelData.csv file into the R programming environment.
+
+```{r}
+PixelData<-read.csv(file="PixelData.csv", header=TRUE, sep=",")
+```
+
+b) How many different probe sets are there in this dataset?
+
+```{r}
+length(unique(PixelData$ProbeSet))
+```    
+
+There are `r length(unique(PixelData$ProbeSet))` different probe sets in this dataset.   
+
+
+c) Write a function that will calculate probe cell intensity using the Affymetrix method (the 75th percentile of the pixel intensities). Apply this function to obtain probe cell intensity for all probes in this dataset. 
+
+Assuming that this dataset does not have borders already. 
+
+
+```{r}
+Affymetrix<-function(d,l,i,q=0.75){
+  #d: dataset
+  #l: list of variable that identify prob cells
+  #i: Intensities
+  #q: percentile. 0.75 is used by Affymetrix method
+
+ setNames(aggregate(eval(substitute(i), d), by=l, FUN=quantile, probs=q, na.rm=TRUE), 
+          c(names(l), "Affymetrix"))
+}
+
+#Set varaibles that identify prob cells
+id<-list(ProbeSet=PixelData$ProbeSet, ProbeX=PixelData$ProbeX, ProbeY=PixelData$ProbeY)
+q4c<-Affymetrix(d=PixelData, l=id, i=Intensity)
+
+library(DT)
+datatable(q4c, options = list(order = list(list(1, 'asc'), list(2, 'asc'), list(3, 'asc')))) 
+
+```   
+
+
+<br /> 
+
+
+d) Write a function to calculate a trimmed mean using the exact formula. Apply this function to the dataset to obtain probe cell intensities for all probes in this dataset, using a trimming percentage of 30%.
+
+```{r}
+trimmed.mean<-function(i,a){
+  #i: Intensities 
+  #a: trimming percentage 
+  
+  n<-length(i)
+  i<-sort(i)
+  g<-floor(n*a) #integer part
+  r <- (n*a) - g # fraction part
+  start_index <- g + 2
+  end_index <- n - g - 1
+  
+  cons<- 1/(n*(1-(2*a)))
+  s<-sum(i[start_index:end_index])
+  e<-(1-r)*sum(i[g+1], i[n-g])
+  t<-cons*(e+s)
+  return(t)
+}  
+
+  
+q4d<-setNames(aggregate(PixelData$Intensity, by=id, FUN=trimmed.mean, a=0.30), 
+          c(names(id), "Trimmed mean"))
+
+datatable(q4d, options = list(order = list(list(1, 'asc'), list(2, 'asc'), list(3, 'asc')))) 
+  
+```   
+
+<br /> 
+
+e) Plot the log2 transformed results from part (c) on the x-axis against the log2 transformed results from part (d) on the y-axis. What do you conclude about the agreement of the two methods in this example? Investigate any problem probes if needed and discuss what attributes to any observed differences.
+
+```{r}   
+q4e<-merge(q4c, q4d)
+plot(log2(q4e$Affymetrix), log2(q4e$`Trimmed mean`),
+     xlab="log2(Affymetrix)", ylab="log2(Trimmed mean)")
+abline(0,1,col="red")
+title(main=list("Scatterplot of the summary of the probe cell intensity using two different methods",
+                cex=0.75))
+#identify(log2(q4e$Affymetrix),  log2(q4e$`Trimmed mean`)) 
+``` 
+
+The above graph shows that there is a good agreement between the two methods. However, the intensities estimated using the trimmed mean are systematically slightly smaller when compared to trimmed mean (values are below the equality line - "red line").
+
+There are four probes where the estimates by the trimmed mean are considerably lower than the Affymetrix estimates. The following table shows the identification of the probes and their respective estimates. The first thing we can notice is that all these probes belong to the same Probe Set. Taking a quick look to the intensities of each probe cell, there are some very high values, to which the 75% percentile belongs, which are excluded when using the trimmed mean.
+
+```{r}
+q4e[c(63,68,70,80),]
+
+e1<-PixelData[PixelData$ProbeX==224 & PixelData$ProbeY==337,]
+e2<-PixelData[PixelData$ProbeX==416 & PixelData$ProbeY==293,]
+e3<-PixelData[PixelData$ProbeX==448 & PixelData$ProbeY==183,]
+e4<-PixelData[PixelData$ProbeX==97 & PixelData$ProbeY==493,]
+```
+<br /> 
+
+## Question 5
+
+The following table consists of pixel level intensities for one spot patch area (these data are also available in hmwk3.csv). In addition, those pixels outside the mask (circle/spot) have been labeled "O" while pixels in the interior of the mask have been labeled "I". Enter all data into the R programming environment (do NOT use scan()).
+
+For these data, use the Mann-Whitney segmentation method to identify foreground and background pixels; note the eight sampled background pixels have been identified for you in the third column. If you fail to reject H0 let the number of pixels to discard equal 2. Once you have identified foreground pixels, calculate the median intensity.
+
+```{r warning=FALSE}   
+
+#Reading data
+q5<-read.csv(file="hmw3.csv", header=TRUE, sep=",")
+
+#Function for Mann-Whitney segmentation
+MW.seg<-function(b, f, r, s=243){
+  #b: Vector with background intensities
+  #f: Vector with foreground intensities
+  #r: Number of pixels to discard each time that we fail to reject
+  #s: seed
+  
+  set.seed(s)
+  y<-sample(b, 8) # Randomly sample 8 obs from background (above line)
+  f<-f[order(f)]
+  p=0.10
+  i<-0 
+  
+  while(p>0.05 & i<=floor((length(f)-8)/r)){
+    v<-f[(1+(i*r)):(8+(i*r))]  
+    test<-wilcox.test(v, y, alternative = "greater")  
+    p<-test$p.value  
+    i<- i+1 
+  }
+  if(p>=0.05){
+    stop('foreground is not significantly different from the background')
+  }else{
+    real.f<-f[(1+((i-1)*r)):length(f)]
+    return(real.f)
+  }
+}
+
+#Getting the Mann-Whitney segmentation for this dataset
+foreground<-MW.seg(b=q5[q5$Location=="O" & q5$Sample.background=="Yes",1],
+                   f=q5[q5$Location=="I",1],
+                   r=2)
+
+foreground
+median(foreground)
+```  
+
+The foreground median intensity, after the Mann-Whitney segmentation, is `r median(foreground)`.     
+
